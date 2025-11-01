@@ -82,3 +82,160 @@ on PointerReleased:
 ```
 
 이 원리만 이해하면, 두께/색/압력 반영, 곡선 스무딩(예: Catmull–Rom) 같은 고급 기능도 같은 흐름에서 쉽게 더하실 수 있어요.
+
+ManinWindow.xaml
+``` 
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="App1.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:App1"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="App1-Jcshim">
+    
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <!-- 그리기 표면 -->
+        <Canvas x:Name="DrawCanvas"
+                Background="Transparent"
+                PointerPressed="DrawCanvas_PointerPressed"
+                PointerMoved="DrawCanvas_PointerMoved"
+                PointerReleased="DrawCanvas_PointerReleased"
+                PointerCanceled="DrawCanvas_PointerReleased"
+                PointerCaptureLost="DrawCanvas_PointerReleased"/>
+    </Grid>
+</Window>
+
+```
+MainWindow.xaml.h
+```
+#pragma once
+#include "MainWindow.g.h"
+
+#include <winrt/Microsoft.UI.Xaml.Shapes.h>
+#include <winrt/Microsoft.UI.Xaml.Input.h>
+
+namespace winrt::App1::implementation
+{
+    struct MainWindow : MainWindowT<MainWindow>
+    {
+        MainWindow();
+
+        // 포인터(마우스) 이벤트 핸들러
+        void DrawCanvas_PointerPressed(winrt::Windows::Foundation::IInspectable const& sender,
+            winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& e);
+        void DrawCanvas_PointerMoved(winrt::Windows::Foundation::IInspectable const& sender,
+            winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& e);
+        void DrawCanvas_PointerReleased(winrt::Windows::Foundation::IInspectable const& sender,
+            winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& e);
+
+    private:
+        winrt::Microsoft::UI::Xaml::Shapes::Polyline m_currentStroke{ nullptr };
+        bool m_isDrawing{ false };
+        // ==== (추가) 백킹 필드 ====
+        // int32_t m_myProperty{ 0 };
+    };
+}
+
+namespace winrt::App1::factory_implementation
+{
+    struct MainWindow : MainWindowT<MainWindow, implementation::MainWindow>
+    {
+    };
+}
+```
+MainWindow.xaml.cpp
+```
+#include "pch.h"
+#include "MainWindow.xaml.h"
+#if __has_include("MainWindow.g.cpp")
+#include "MainWindow.g.cpp"
+#endif
+
+#include <winrt/Microsoft.UI.Xaml.Media.h>
+#include <winrt/Microsoft.UI.Xaml.Shapes.h>
+#include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Xaml.Input.h>
+#include <winrt/Microsoft.UI.Input.h>     // ★ PointerPoint 선언
+// #include <winrt/Windows.UI.h>         // Colors 상수를 쓸 거면 이 줄도 추가
+
+using namespace winrt;
+using namespace Microsoft::UI::Xaml;
+using namespace Microsoft::UI::Xaml::Controls;
+using namespace Microsoft::UI::Xaml::Input;
+using namespace Microsoft::UI::Xaml::Media;
+using namespace Microsoft::UI::Xaml::Shapes;
+
+#include <winrt/Microsoft.UI.Windowing.h> // AppWindow
+namespace winrt::App1::implementation
+{
+    MainWindow::MainWindow()
+    {
+        InitializeComponent();
+        // WinUI 3: Window.AppWindow() 사용
+        if (auto aw = this->AppWindow())
+        {
+            aw.Resize({ 640, 480 });  // 창 크기 640x480
+        }
+    }
+
+    void MainWindow::DrawCanvas_PointerPressed(IInspectable const&, PointerRoutedEventArgs const& e)
+    {
+        auto canvas = this->DrawCanvas(); // x:Name 접근자
+        if (!canvas) return;
+
+        auto point = e.GetCurrentPoint(canvas); // Microsoft::UI::Input::PointerPoint
+        if (!point.Properties().IsLeftButtonPressed()) return;
+
+        m_isDrawing = true;
+
+        m_currentStroke = Microsoft::UI::Xaml::Shapes::Polyline{};
+        // Colors::Black 대신 RGBA로 직접 지정(추가 헤더 불필요)
+        m_currentStroke.Stroke(SolidColorBrush(Windows::UI::Color{ 255, 0, 255, 0 })); // A,R,G,B
+        m_currentStroke.StrokeThickness(2.0);
+        m_currentStroke.StrokeLineJoin(PenLineJoin::Round);
+
+        auto pos = point.Position();
+        m_currentStroke.Points().Append(Windows::Foundation::Point{
+            static_cast<float>(pos.X), static_cast<float>(pos.Y) });
+
+        canvas.Children().Append(m_currentStroke);
+        canvas.CapturePointer(e.Pointer());
+
+        e.Handled(true);
+    }
+
+    void MainWindow::DrawCanvas_PointerMoved(IInspectable const&, PointerRoutedEventArgs const& e)
+    {
+        if (!m_isDrawing || !m_currentStroke) return;
+
+        auto canvas = this->DrawCanvas();
+        if (!canvas) return;
+
+        auto point = e.GetCurrentPoint(canvas);
+        if (!point.IsInContact()) return;
+
+        auto pos = point.Position();
+        m_currentStroke.Points().Append(Windows::Foundation::Point{
+            static_cast<float>(pos.X), static_cast<float>(pos.Y) });
+
+        e.Handled(true);
+    }
+
+    void MainWindow::DrawCanvas_PointerReleased(IInspectable const&, PointerRoutedEventArgs const& e)
+    {
+        if (!m_isDrawing) return;
+
+        if (auto canvas = this->DrawCanvas())
+            canvas.ReleasePointerCaptures();
+
+        m_isDrawing = false;
+        m_currentStroke = nullptr;
+
+        e.Handled(true);
+    }
+}
+```
+
