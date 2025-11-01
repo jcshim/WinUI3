@@ -22,9 +22,17 @@
         <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12" Padding="8">
 
             <!-- 색상 버튼 + 플라이아웃(ColorPicker) -->
-            <Button x:Name="ColorButton" Content="색상" VerticalAlignment="Center">
+            <Button x:Name="ColorButton" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="색상" VerticalAlignment="Center"/>
+                    <!-- 현재 색 미리보기 칩 -->
+                    <Ellipse x:Name="ColorPreview" Width="18" Height="18"
+                             Stroke="{ThemeResource SystemControlForegroundBaseMediumBrush}"
+                             StrokeThickness="1"/>
+                </StackPanel>
                 <Button.Flyout>
-                    <Flyout x:Name="ColorFlyout" Placement="Bottom">
+                    <Flyout x:Name="ColorFlyout" Placement="Bottom"
+                            ShouldConstrainToRootBounds="True">
                         <StackPanel Orientation="Vertical" Spacing="8" Padding="8">
                             <TextBlock Text="펜 색상 선택" Margin="0,0,0,4"/>
                             <ColorPicker x:Name="PenColorPicker"
@@ -33,6 +41,11 @@
                                          MinWidth="220"
                                          Color="#FF000000"
                                          ColorChanged="PenColorPicker_ColorChanged"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                <Button x:Name="ApplyColorButton" Content="적용"
+                                        Click="ApplyColorButton_Click"/>
+                                <Button Content="닫기" Click="CloseColorFlyout_Click"/>
+                            </StackPanel>
                         </StackPanel>
                     </Flyout>
                 </Button.Flyout>
@@ -61,6 +74,7 @@
                 PointerCaptureLost="DrawCanvas_PointerReleased"/>
     </Grid>
 </Window>
+
 ```
 
 ```
@@ -71,6 +85,7 @@
 #include <winrt/Microsoft.UI.Xaml.Shapes.h>
 #include <winrt/Microsoft.UI.Xaml.Input.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.Primitives.h>   // Slider ValueChanged args
+#include <winrt/Microsoft.UI.Xaml.Media.h>
 
 namespace winrt::App1::implementation
 {
@@ -89,6 +104,10 @@ namespace winrt::App1::implementation
         // 툴바 이벤트
         void PenColorPicker_ColorChanged(winrt::Windows::Foundation::IInspectable const& sender,
             winrt::Microsoft::UI::Xaml::Controls::ColorChangedEventArgs const& e);
+        void ApplyColorButton_Click(winrt::Windows::Foundation::IInspectable const& sender,
+            winrt::Microsoft::UI::Xaml::RoutedEventArgs const& e);
+        void CloseColorFlyout_Click(winrt::Windows::Foundation::IInspectable const& sender,
+            winrt::Microsoft::UI::Xaml::RoutedEventArgs const& e);
         void ThicknessSlider_ValueChanged(winrt::Windows::Foundation::IInspectable const& sender,
             winrt::Microsoft::UI::Xaml::Controls::Primitives::RangeBaseValueChangedEventArgs const& e);
 
@@ -97,12 +116,16 @@ namespace winrt::App1::implementation
         winrt::Microsoft::UI::Xaml::Shapes::Polyline m_currentStroke{ nullptr };
         bool m_isDrawing{ false };
 
-        // 전역 펜 상태(새 스트로크에 적용)
-        winrt::Windows::UI::Color m_currentColor{ 255, 0, 0, 0 }; // A,R,G,B (기본: 검정)
+        // 전역 펜 상태(확정된 값: 새/현재 스트로크에 적용)
+        winrt::Windows::UI::Color m_currentColor{ 255, 0, 0, 0 }; // A,R,G,B (검정)
         double m_currentThickness{ 2.0 };
-
-        // 모든 스트로크가 공유하는 공용 브러시(색 변경 즉시 반영)
         winrt::Microsoft::UI::Xaml::Media::SolidColorBrush m_currentBrush{ nullptr };
+
+        // ColorPicker에서 임시 선택(미리보기용, 적용 버튼 누를 때 확정)
+        winrt::Windows::UI::Color m_pendingColor{ 255, 0, 0, 0 };
+
+        // 미리보기 칩 업데이트
+        void UpdateColorPreview();
     };
 }
 
@@ -112,6 +135,7 @@ namespace winrt::App1::factory_implementation
     {
     };
 }
+
 ```
 
 ```
@@ -144,51 +168,71 @@ namespace winrt::App1::implementation
         // (선택) 창 크기 640x480
         if (auto aw = this->AppWindow())
         {
-            aw.Resize({ 640, 480 });
+            aw.Resize({ 800, 600 });
         }
 
-        // 공용 브러시 초기화 (현재 색으로)
+        // 공용 브러시 초기화 (현재 확정 색으로)
         m_currentBrush = SolidColorBrush(m_currentColor);
 
-        // ColorPicker 초기값을 코드에서도 맞춰 UI와 상태 일치
+        // UI 초기 동기화
         if (auto cp = this->PenColorPicker())
         {
             cp.Color(m_currentColor);
         }
+        UpdateColorPreview();
 
-        // 굵기 텍스트 초기화
         if (auto tb = this->ThicknessValueText())
         {
             tb.Text(L"2.0 px");
         }
     }
 
-    // ==== 툴바: 색상 선택 ====
+    // ==== ColorPicker: 드래그 중 연속 호출 → 미리보기만 갱신 ====
     void MainWindow::PenColorPicker_ColorChanged(IInspectable const&,
         Microsoft::UI::Xaml::Controls::ColorChangedEventArgs const& e)
     {
-        m_currentColor = e.NewColor();
+        // 선택 색은 임시로 저장 (적용 버튼 누를 때까지 확정하지 않음)
+        m_pendingColor = e.NewColor();
 
-        // 공유 브러시 색만 변경 → 현재/이후 스트로크 모두 즉시 반영
+        // 미리보기 칩 업데이트 (Ellipse Fill)
+        UpdateColorPreview();
+    }
+
+    // ==== [적용] 버튼: 이때만 실제 펜 색 확정 ====
+    void MainWindow::ApplyColorButton_Click(IInspectable const&, RoutedEventArgs const&)
+    {
+        m_currentColor = m_pendingColor;
+
+        // 공유 브러시 색 변경 → 현재 스트로크 포함 즉시 반영
         if (m_currentBrush)
             m_currentBrush.Color(m_currentColor);
 
-        // 선택 후 플라이아웃 닫기(원치 않으면 주석 처리)
+        // ColorPicker와 UI 미리보기 동기화(안전)
+        if (auto cp = this->PenColorPicker())
+            cp.Color(m_currentColor);
+        UpdateColorPreview();
+
+        // 플라이아웃 닫기
         if (auto f = this->ColorFlyout())
             f.Hide();
     }
 
-    // ==== 툴바: 굵기 선택 ====
+    void MainWindow::CloseColorFlyout_Click(IInspectable const&, RoutedEventArgs const&)
+    {
+        if (auto f = this->ColorFlyout())
+            f.Hide();
+    }
+
+    // ==== 굵기 선택 ====
     void MainWindow::ThicknessSlider_ValueChanged(IInspectable const&,
         Microsoft::UI::Xaml::Controls::Primitives::RangeBaseValueChangedEventArgs const& e)
     {
         m_currentThickness = e.NewValue();
 
-        // 현재 스트로크에 즉시 반영 (다음 스트로크도 이 값으로 시작)
+        // 현재 스트로크에 즉시 반영
         if (m_currentStroke)
             m_currentStroke.StrokeThickness(m_currentThickness);
 
-        // 우측 표시 갱신
         if (auto tb = this->ThicknessValueText())
         {
             wchar_t buf[32]{};
@@ -255,8 +299,16 @@ namespace winrt::App1::implementation
         m_currentStroke = nullptr;
         e.Handled(true);
     }
-}
 
+    // ==== 미리보기 칩 업데이트 ====
+    void MainWindow::UpdateColorPreview()
+    {
+        if (auto chip = this->ColorPreview())
+        {
+            chip.Fill(SolidColorBrush(m_pendingColor));  // 현재 선택(임시) 색
+        }
+    }
+}
 ```
 
 
