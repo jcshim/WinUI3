@@ -92,7 +92,8 @@ namespace winrt::App1::implementation
     struct MainWindow : MainWindowT<MainWindow>
     {
         MainWindow();
-
+        int32_t MyProperty();
+        void MyProperty(int32_t value);
         // 그리기(포인터) 이벤트
         void DrawCanvas_PointerPressed(winrt::Windows::Foundation::IInspectable const& sender,
             winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& e);
@@ -164,7 +165,7 @@ namespace winrt::App1::implementation
     MainWindow::MainWindow()
     {
         InitializeComponent();
-
+ 
         // (선택) 창 크기 640x480
         if (auto aw = this->AppWindow())
         {
@@ -186,7 +187,8 @@ namespace winrt::App1::implementation
             tb.Text(L"2.0 px");
         }
     }
-
+    int32_t MainWindow::MyProperty() { throw hresult_not_implemented(); }
+    void MainWindow::MyProperty(int32_t) { throw hresult_not_implemented(); }
     // ==== ColorPicker: 드래그 중 연속 호출 → 미리보기만 갱신 ====
     void MainWindow::PenColorPicker_ColorChanged(IInspectable const&,
         Microsoft::UI::Xaml::Controls::ColorChangedEventArgs const& e)
