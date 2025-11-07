@@ -1,5 +1,6 @@
 <img width="594" height="527" alt="image" src="https://github.com/user-attachments/assets/1749c215-e3ce-42cb-bc71-543672bbbfb0" />
 
+# MainWindow.xaml
 ```
 <?xml version="1.0" encoding="utf-8"?>
 <Window
@@ -82,6 +83,7 @@
 </Window>
 
 ```
+# MainWindow.xaml.h
 ```
 #pragma once
 #include "MainWindow.g.h"
@@ -172,6 +174,7 @@ namespace winrt::App1::factory_implementation
     };
 }
 ```
+# MainWindow.xaml.cpp
 ```
 #include "pch.h"
 #include "MainWindow.xaml.h"
