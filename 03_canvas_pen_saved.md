@@ -115,7 +115,8 @@ namespace winrt::App1::implementation
     struct MainWindow : MainWindowT<MainWindow>
     {
         MainWindow();
-
+        int32_t MyProperty();
+        void MyProperty(int32_t value);
         // 그리기(포인터) 이벤트
         void DrawCanvas_PointerPressed(winrt::Windows::Foundation::IInspectable const& sender,
             winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& e);
@@ -230,6 +231,8 @@ namespace winrt::App1::implementation
             tb.Text(L"2.0 px");
         }
     }
+    int32_t MainWindow::MyProperty() { throw hresult_not_implemented(); }
+    void MainWindow::MyProperty(int32_t) { throw hresult_not_implemented(); }
 
     // ---- Win32 HWND로 FilePicker 초기화 (WinApp SDK 버전 무관) ----
     void MainWindow::InitializePickerWithWindow(Windows::Foundation::IInspectable const& picker)
