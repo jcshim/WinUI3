@@ -122,7 +122,8 @@ namespace winrt::App1::implementation
     struct MainWindow : MainWindowT<MainWindow>
     {
         MainWindow();
-
+        int32_t MyProperty();
+        void MyProperty(int32_t value); 
         // 포인터(마우스) 이벤트 핸들러
         void DrawCanvas_PointerPressed(winrt::Windows::Foundation::IInspectable const& sender,
             winrt::Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& e);
@@ -180,6 +181,8 @@ namespace winrt::App1::implementation
             aw.Resize({ 640, 480 });  // 창 크기 640x480
         }
     }
+    int32_t MainWindow::MyProperty() { throw hresult_not_implemented(); }
+    void MainWindow::MyProperty(int32_t) { throw hresult_not_implemented(); }
 
     void MainWindow::DrawCanvas_PointerPressed(IInspectable const&, PointerRoutedEventArgs const& e)
     {
